@@ -3,6 +3,8 @@ from fastapi import FastAPI, HTTPException, Depends
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.ext.declarative import declarative_base
+import jwt
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 # Создание подключения к базе данных auth.db
 auth_engine = create_engine("sqlite:///auth.db")
@@ -15,6 +17,7 @@ OrderSession = sessionmaker(bind=order_engine)
 order_session = OrderSession()
 
 Base = declarative_base()
+
 
 # Модель User
 class User(Base):
@@ -105,8 +108,14 @@ def create_order(user_id: int, dish_data: list, special_requests: str = "", db=D
 
 # Конечная точка для обработки заказов
 @app.post("/process_orders")
-def process_orders(db=Depends(get_db)):
+def process_orders(token: str, db=Depends(get_db)):
+    back_token = jwt.decode(token, "secret_key", algorithms=["HS256"])
+
+    if back_token["role"] != "manager":
+        raise  HTTPException(status_code=403, detail="Not granted")
+
     orders = db.query(Order).filter(Order.status == "в ожидании").all()
+
     for order in orders:
         # Логика обработки заказа...
         order.status = "выполнен"

@@ -6,7 +6,7 @@ import jwt
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.ext.declarative import declarative_base
-from email_validate import validate, validate_or_fail
+from email_validate import validate
 
 # Конфигурация базы данных
 SQLALCHEMY_DATABASE_URL = "sqlite:///./auth.db"
@@ -75,8 +75,8 @@ def create_user(username: str, email: str, password: str, role: str, db):
 
 def create_session(user: User, db):
     token_expires = datetime.utcnow() + timedelta(minutes=15)
-    token = jwt.encode({"sub": user.email, "exp": token_expires}, "secret_key", algorithm="HS256")
-    session = Session(user_id=user.id, session_token=token.decode(), expires_at=token_expires)
+    token = jwt.encode({"sub": user.email, "exp": token_expires, "role":user.role}, "secret_key", algorithm="HS256")
+    session = Session(user_id=user.id, session_token=token, expires_at=token_expires)
     db.add(session)
     db.commit()
     db.refresh(session)
@@ -153,6 +153,26 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db=Depends(get_db)):
 @app.get("/users/me")
 def read_users_me(current_user: User = Depends(get_current_user)):
     return {"username": current_user.username, "email": current_user.email, "role": current_user.role}
+
+
+@app.put("/users/set_role/{user_login}")
+def update_user_role(login: str, role: str, db=Depends(get_db)):
+    # Проверка наличия пользователя
+
+    current_user = db.query(User).filter(User.email == login).first()
+
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Обновление роли пользователя
+    if role not in ["user", "manager"]:
+        raise HTTPException(status_code=403, detail="Wrong role!")
+
+    current_user.role = role
+
+    db.commit()
+
+    return {"message": "User role updated successfully"}
 
 
 # Запуск приложения
